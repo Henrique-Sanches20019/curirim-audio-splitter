@@ -1,0 +1,41 @@
+[project]
+name = "curirim-audio-splitter"
+version = "0.1.0"
+description = "Music source separation model built from scratch in PyTorch, served by a FastAPI web app."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    # Model / training
+    "torch>=2.8",
+    "numpy",
+    "scipy",
+    "soundfile",
+    "pyyaml",
+    "tensorboard",
+    # Dataset / evaluation
+    "musdb",
+    "museval",
+    "norbert",
+    # Inference / export
+    "onnx",
+    "onnxruntime",
+    # Backend
+    "fastapi",
+    "uvicorn[standard]",
+    "python-multipart",
+]
+
+[dependency-groups]
+dev = [
+    "matplotlib>=3.11.2",
+    "pytest",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/curirim"]

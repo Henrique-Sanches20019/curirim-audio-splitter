@@ -1,0 +1,17 @@
+.claude/
+.venv/
+docs/
+baCurau-dataset/
+musdb18/
+CLAUDE.md
+# Generated data, never commit (MUSDB18 is educational-use only)
+musdb18-wav/
+outputs/
+checkpoints/
+runs/
+reports/
+*.wav
+*.pt
+*.onnx
+__pycache__/
+.pytest_cache/
