@@ -1,6 +1,7 @@
 .claude/
 .venv/
 docs/
+reports/
 baCurau-dataset/
 musdb18/
 CLAUDE.md
@@ -9,7 +10,6 @@ musdb18-wav/
 outputs/
 checkpoints/
 runs/
-reports/
 *.wav
 *.pt
 *.onnx
