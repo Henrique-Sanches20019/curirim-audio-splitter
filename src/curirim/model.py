@@ -14,6 +14,7 @@ layers, so callers pass raw magnitudes and the masks multiply raw magnitudes.
 """
 
 import torch
+import torch.nn.functional as F
 from torch import nn
 
 from curirim.data import STEMS
@@ -49,3 +50,93 @@ class TinyNet(nn.Module):
     def forward(self, magnitude: torch.Tensor) -> torch.Tensor:
         """Raw magnitude `(batch, 2, bins, frames)` to masks `(batch, 4, 2, bins, frames)`."""
         return stem_masks(self.conv(torch.log1p(magnitude)))
+
+
+ENCODER_CHANNELS = (16, 32, 64, 128, 256, 512)
+DEPTH = len(ENCODER_CHANNELS)  # 6 stride-2 layers
+MULTIPLE = 2**DEPTH  # 64: both spectrogram axes must divide by this inside the U-Net
+
+
+class UNet(nn.Module):
+    """Spectrogram U-Net (Spleeter-style), one network shared by all four stems.
+
+    Encoder: 6 × (Conv2d 5×5 stride 2 → BatchNorm → LeakyReLU 0.2), channels
+    16→32→64→128→256→512. Each layer halves bins and frames, so a 1024 × 576
+    input reaches the bottleneck at 512 channels × 16 × 9.
+
+    Decoder: 6 × (ConvTranspose2d 5×5 stride 2 → BatchNorm → ReLU), each
+    doubling bins and frames. After each of the first 5 blocks, the output is
+    concatenated with the encoder output of the same size (skip connection),
+    which brings back the fine time-frequency detail lost on the way down.
+    Dropout 0.5 on the first 3 blocks regularizes the deep, wide layers: there
+    are only 100 training songs.
+
+    Head: 1×1 convolution to 8 logits, then `stem_masks` (softmax over stems).
+
+    Both spectrogram axes must divide by 64. `forward` pads frames (and bins,
+    if needed) with zeros to the next multiple of 64 and crops the masks back,
+    so the network accepts any song length.
+    """
+
+    def __init__(self):
+        """Build the 6 encoder blocks, 6 decoder blocks and the 1×1 mask head."""
+        super().__init__()
+        self.encoder = nn.ModuleList()
+        in_channels = N_CHANNELS
+        for out_channels in ENCODER_CHANNELS:
+            self.encoder.append(
+                nn.Sequential(
+                    # 5×5, stride 2, padding 2: output is exactly half the input (even sizes).
+                    nn.Conv2d(in_channels, out_channels, kernel_size=5, stride=2, padding=2),
+                    nn.BatchNorm2d(out_channels),
+                    nn.LeakyReLU(0.2),
+                )
+            )
+            in_channels = out_channels
+
+        # Decoder outputs: 256, 128, 64, 32, 16 (each matched by a skip), then 16 at full size.
+        decoder_channels = ENCODER_CHANNELS[-2::-1] + (ENCODER_CHANNELS[0],)
+        self.decoder = nn.ModuleList()
+        in_channels = ENCODER_CHANNELS[-1]
+        for index, out_channels in enumerate(decoder_channels):
+            layers = [
+                # output_padding 1 makes the output exactly twice the input.
+                nn.ConvTranspose2d(
+                    in_channels, out_channels, kernel_size=5, stride=2, padding=2, output_padding=1
+                ),
+                nn.BatchNorm2d(out_channels),
+                nn.ReLU(),
+            ]
+            if index < 3:
+                layers.append(nn.Dropout(0.5))
+            self.decoder.append(nn.Sequential(*layers))
+            # The next block reads this output concatenated with the same-sized encoder output.
+            in_channels = 2 * out_channels if index < DEPTH - 1 else out_channels
+
+        self.head = nn.Conv2d(in_channels, N_OUTPUTS, kernel_size=1)
+
+    def forward(self, magnitude: torch.Tensor) -> torch.Tensor:
+        """Raw magnitude `(batch, 2, bins, frames)` to masks `(batch, 4, 2, bins, frames)`.
+
+        log1p compresses the magnitude's huge dynamic range (near 0 to
+        hundreds) before the first layer; the masks still multiply the raw
+        magnitude outside the network.
+        """
+        bins, frames = magnitude.shape[-2:]
+        # Pad bottom/right with zeros up to multiples of 64 so every stride-2
+        # layer halves an even size and the skip connections line up exactly.
+        x = F.pad(torch.log1p(magnitude), (0, -frames % MULTIPLE, 0, -bins % MULTIPLE))
+
+        skips = []
+        for block in self.encoder:
+            x = block(x)
+            skips.append(x)
+
+        # The deepest encoder output is the decoder's input, not a skip.
+        skips.pop()
+        for block in self.decoder:
+            x = block(x)
+            if skips:
+                x = torch.cat([x, skips.pop()], dim=1)
+
+        return stem_masks(self.head(x)[..., :bins, :frames])

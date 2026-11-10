@@ -26,11 +26,16 @@ SAMPLE_RATE = 44100
 
 
 def musdb_root(root: str | os.PathLike | None = None) -> Path:
-    """Resolve the dataset root from the argument or MUSDB_PATH."""
+    """Resolve the dataset root from the argument or MUSDB_PATH.
+
+    A leading `~` is expanded: a quoted `export MUSDB_PATH="~/..."` leaves the
+    tilde unexpanded by the shell, and Python would otherwise treat it as a
+    folder literally named `~`.
+    """
     root = root or os.environ.get("MUSDB_PATH")
     if not root:
         raise RuntimeError("Set MUSDB_PATH or pass the dataset root explicitly.")
-    path = Path(root)
+    path = Path(root).expanduser()
     if not path.is_dir():
         raise FileNotFoundError(f"Dataset root {path} does not exist.")
     return path
