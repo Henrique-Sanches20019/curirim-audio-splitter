@@ -1,0 +1,17 @@
+# Full training run of the U-Net on MUSDB18 (86 train / 14 valid tracks).
+# Meant for a GPU on the university server. Values not listed use the defaults in
+# src/curirim/train.py (Config).
+
+seed: 0
+crop_frames: 512          # 511 x 512 samples = 5.93 s; a multiple of 64, no U-Net padding
+crops_per_track: 64       # 86 tracks x 64 = 5504 crops = 344 batches per epoch
+valid_crops_per_track: 8  # 14 tracks x 8 = 112 fixed validation crops
+gain_range: [0.25, 1.25]
+swap_probability: 0.5
+batch_size: 16
+num_workers: 4            # data loading (~70 ms per crop) is likely the bottleneck
+lr: 0.001
+epochs: 300
+checkpoint_minutes: 10
+log_every_steps: 50
+audio_every_epochs: 5

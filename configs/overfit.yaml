@@ -1,0 +1,16 @@
+# Exit check 1: overfit one song on the laptop CPU, augmentation off.
+# Train and validation are the same 4 fixed crops of one song, so the loss
+# should fall far below its starting value. If it does not, the model, loss
+# or optimizer is wired wrong. The track must exist in the decoded WAV tree.
+
+seed: 0
+overfit_track: "ANiMAL - Clinic A"
+crop_frames: 256          # 255 x 512 samples = 2.96 s; shorter crops keep CPU steps fast
+crops_per_track: 4        # 4 crops = 1 batch per epoch
+batch_size: 4
+num_workers: 0
+lr: 0.001
+epochs: 300
+checkpoint_minutes: 10
+log_every_steps: 10
+audio_every_epochs: 50
