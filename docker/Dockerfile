@@ -29,10 +29,19 @@ ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
     HOME=/tmp
 
 # Exact versions from uv.lock; the project itself is not installed (see PYTHONPATH).
+# Cache mount: downloaded wheels persist between builds but stay out of the image,
+# so a build that fails midway resumes without downloading the finished wheels again.
+# Slow server link: the CUDA wheels are ~0.5 GB each, so allow long stalls, retry more,
+# and download fewer files at once so each gets more bandwidth.
 COPY pyproject.toml uv.lock /tmp/curirim/
-RUN cd /tmp/curirim \
-    && uv sync --frozen --no-install-project \
-    && rm -rf /tmp/curirim /root/.cache/uv
+RUN --mount=type=cache,target=/var/cache/uv \
+    cd /tmp/curirim \
+    && UV_CACHE_DIR=/var/cache/uv \
+       UV_HTTP_TIMEOUT=600 \
+       UV_HTTP_RETRIES=10 \
+       UV_CONCURRENT_DOWNLOADS=2 \
+       uv sync --frozen --no-install-project \
+    && rm -rf /tmp/curirim
 
 # TensorBoard.
 EXPOSE 6006
