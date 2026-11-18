@@ -1,0 +1,5 @@
+# The image holds only the dependencies; the repository is mounted at run time.
+# Keeps the multi-GB dataset, runs and .venv out of the build context.
+*
+!pyproject.toml
+!uv.lock
